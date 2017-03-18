@@ -19,7 +19,7 @@ from pathlib import Path
 from datacube.ui.expression import parse_expressions
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
-from executor import list_executors, get_executor
+from datacube.executor import list_executors, get_executor
 
 _LOG_FORMAT_STRING = '%(asctime)s %(process)d %(name)s %(levelname)s %(message)s'
 CLICK_SETTINGS = dict(help_option_names=['-h', '--help'])

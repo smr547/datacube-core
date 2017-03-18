@@ -154,7 +154,7 @@ def get_distributed_executor(scheduler, log_setup_function):
             future.release()
 
     try:
-        return DistributedExecutor(distributed.Client(scheduler), setup_stdout_logging)
+        return DistributedExecutor(distributed.Client(scheduler), log_setup_function)
     except IOError:
         return None
 
