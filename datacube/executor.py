@@ -16,6 +16,7 @@ from __future__ import absolute_import, division
 
 import sys
 import six
+import logging
 
 _REMOTE_LOG_FORMAT_STRING = '%(asctime)s {} %(process)d %(name)s %(levelname)s %(message)s'
 
@@ -66,19 +67,34 @@ class SerialExecutor(object):
         pass
 
 
-def setup_logging():
-    import logging
-    import socket
+def setup_stdout_logging(level=logging.WARN):
+    def remote_function():
+        import socket
 
-    hostname = socket.gethostname()
-    log_format_string = _REMOTE_LOG_FORMAT_STRING.format(hostname)
+        hostname = socket.gethostname()
+        log_format_string = _REMOTE_LOG_FORMAT_STRING.format(hostname)
 
-    handler = logging.StreamHandler()
-    handler.formatter = logging.Formatter(log_format_string)
-    logging.root.handlers = [handler]
+        handler = logging.StreamHandler()
+        handler.formatter = logging.Formatter(log_format_string)
+        logging.root.handlers = [handler]
+        logging.root.setLevel(level)
+        if level <= logging.INFO:
+            logging.getLogger('rasterio').setLevel(logging.INFO)
+    return remote_function
 
 
-def get_distributed_executor(scheduler):
+def setup_logstash_logging(host, level=logging.DEBUG):
+    def remote_function():
+        import logstash
+
+        logging.root.addHandler(logstash.LogstashHandler(host, 5959, version=1))
+        logging.root.setLevel(level)
+        if level <= logging.INFO:
+            logging.getLogger('rasterio').setLevel(logging.INFO)
+    return remote_function
+
+
+def get_distributed_executor(scheduler, log_setup_function):
     """
     :param scheduler: Address of a scheduler
     """
@@ -88,16 +104,17 @@ def get_distributed_executor(scheduler):
         return None
 
     class DistributedExecutor(object):
-        def __init__(self, client):
+        def __init__(self, client, log_setup_function):
             """
             :type client: distributed.Client
             :return:
             """
             self._client = client
+            self.log_setup_function = log_setup_function
             self.setup_logging()
 
         def setup_logging(self):
-            self._client.run(setup_logging)
+            self._client.run(self.log_setup_function)
 
         def submit(self, func, *args, **kwargs):
             return self._client.submit(func, *args, pure=False, **kwargs)
@@ -137,8 +154,7 @@ def get_distributed_executor(scheduler):
             future.release()
 
     try:
-        executor = DistributedExecutor(distributed.Client(scheduler))
-        return executor
+        return DistributedExecutor(distributed.Client(scheduler), setup_stdout_logging)
     except IOError:
         return None
 
@@ -205,7 +221,8 @@ def get_multiproc_executor(num_workers):
 EXECUTOR_TYPES = {
     'serial': lambda _: SerialExecutor(),
     'multiproc': lambda num_workers: get_multiproc_executor(num_workers),
-    'distributed': lambda scheduler_addr: get_distributed_executor(scheduler_addr),
+    'distributed': lambda scheduler_addr: get_distributed_executor(scheduler_addr,
+                                                                   setup_logstash_logging(scheduler_addr.split(':')[0])),
 }
 
 
