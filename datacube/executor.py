@@ -201,3 +201,17 @@ def get_multiproc_executor(num_workers):
 
     return MultiprocessingExecutor(ProcessPoolExecutor(num_workers if num_workers > 0 else None))
 
+
+EXECUTOR_TYPES = {
+    'serial': lambda _: SerialExecutor(),
+    'multiproc': lambda num_workers: get_multiproc_executor(num_workers),
+    'distributed': lambda scheduler_addr: get_distributed_executor(scheduler_addr),
+}
+
+
+def list_executors():
+    return EXECUTOR_TYPES.keys()
+
+
+def get_executor(executor_type, executor_arg):
+    return EXECUTOR_TYPES[executor_type](executor_arg)

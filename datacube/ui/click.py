@@ -13,14 +13,13 @@ import sys
 import click
 
 from datacube import config, __version__
-from datacube.executor import get_multiproc_executor, get_distributed_executor
 from datacube.index import index_connect
 from pathlib import Path
 
 from datacube.ui.expression import parse_expressions
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
-from executor import SerialExecutor
+from executor import list_executors, get_executor
 
 _LOG_FORMAT_STRING = '%(asctime)s %(process)d %(name)s %(levelname)s %(message)s'
 CLICK_SETTINGS = dict(help_option_names=['-h', '--help'])
@@ -208,24 +207,17 @@ def pass_index(app_name=None, expect_initialised=True):
     return decorate
 
 
-EXECUTOR_TYPES = {
-    'serial': lambda _: SerialExecutor(),
-    'multiproc': lambda num_workers: get_multiproc_executor(num_workers),
-    'distributed': lambda scheduler_addr: get_distributed_executor(scheduler_addr),
-}
-
-
 def _setup_executor(ctx, param, value):
     """Called when an --executor argument is passed on the CLI."""
     try:
         executor_type, executor_arg = value
-        return EXECUTOR_TYPES[executor_type](executor_arg)
+        return get_executor(executor_type, executor_arg)
     except ValueError:
         ctx.fail("Failed to create '%s' executor with '%s'" % value)
 
 
 executor_cli_options = click.option('--executor',
-                                    type=(click.Choice(EXECUTOR_TYPES.keys()), str),
+                                    type=(click.Choice(list_executors()), str),
                                     default=('serial', None),
                                     help="Run parallelized, either locally or distributed. eg:\n"
                                          "--executor multiproc 4 (OR)\n"
