@@ -78,7 +78,7 @@ def setup_logging():
     logging.root.handlers = [handler]
 
 
-def _get_distributed_executor(scheduler):
+def get_distributed_executor(scheduler):
     """
     :param scheduler: Address of a scheduler
     """
@@ -88,22 +88,22 @@ def _get_distributed_executor(scheduler):
         return None
 
     class DistributedExecutor(object):
-        def __init__(self, executor):
+        def __init__(self, client):
             """
-            :type executor: distributed.Executor
+            :type client: distributed.Client
             :return:
             """
-            self._executor = executor
+            self._client = client
             self.setup_logging()
 
         def setup_logging(self):
-            self._executor.run(setup_logging)
+            self._client.run(setup_logging)
 
         def submit(self, func, *args, **kwargs):
-            return self._executor.submit(func, *args, pure=False, **kwargs)
+            return self._client.submit(func, *args, pure=False, **kwargs)
 
         def map(self, func, iterable):
-            return self._executor.map(func, iterable)
+            return self._client.map(func, iterable)
 
         @staticmethod
         def get_ready(futures):
@@ -126,7 +126,7 @@ def _get_distributed_executor(scheduler):
             return result, results
 
         def results(self, futures):
-            return self._executor.gather(futures)
+            return self._client.gather(futures)
 
         @staticmethod
         def result(future):
@@ -143,7 +143,7 @@ def _get_distributed_executor(scheduler):
         return None
 
 
-def _get_concurrent_executor(workers):
+def get_multiproc_executor(num_workers):
     try:
         from concurrent.futures import ProcessPoolExecutor, as_completed
     except ImportError:
@@ -199,26 +199,5 @@ def _get_concurrent_executor(workers):
         def release(future):
             pass
 
-    return MultiprocessingExecutor(ProcessPoolExecutor(workers if workers > 0 else None))
+    return MultiprocessingExecutor(ProcessPoolExecutor(num_workers if num_workers > 0 else None))
 
-
-def get_executor(scheduler, workers):
-    """
-    Return a task executor based on input parameters. Falling back as required.
-
-    :param scheduler: IP address and port of a distributed.Scheduler, or a Scheduler instance
-    :param workers: Number of processes to start for process based parallel execution
-    """
-    if not workers:
-        return SerialExecutor()
-
-    if scheduler:
-        distributed_exec = _get_distributed_executor(scheduler)
-        if distributed_exec:
-            return distributed_exec
-
-    concurrent_exec = _get_concurrent_executor(workers)
-    if concurrent_exec:
-        return concurrent_exec
-
-    return SerialExecutor()

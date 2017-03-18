@@ -13,19 +13,25 @@ import sys
 import click
 
 from datacube import config, __version__
-from datacube.executor import get_executor
+from datacube.executor import get_multiproc_executor, get_distributed_executor
 from datacube.index import index_connect
 from pathlib import Path
 
 from datacube.ui.expression import parse_expressions
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
+from executor import SerialExecutor
+
 _LOG_FORMAT_STRING = '%(asctime)s %(process)d %(name)s %(levelname)s %(message)s'
 CLICK_SETTINGS = dict(help_option_names=['-h', '--help'])
 _LOG = logging.getLogger(__name__)
 
 
+#######################################################
+# Private methods for handling click argument callbacks
+
 def _print_version(ctx, param, value):
+    """Called when --version argument is used."""
     if not value or ctx.resilient_parsing:
         return
 
@@ -82,6 +88,7 @@ class ClickHandler(logging.Handler):
 
 
 def _init_logging(ctx, param, value):
+    """Called when --verbose or -v argument is used. """
     handler = ClickHandler()
     handler.formatter = ColorFormatter(_LOG_FORMAT_STRING)
     logging.root.addHandler(handler)
@@ -101,6 +108,7 @@ def _init_logging(ctx, param, value):
 
 
 def _add_logfile(ctx, param, value):
+    """ Called when --log-file argument is used. """
     formatter = logging.Formatter(_LOG_FORMAT_STRING)
     for logfile in value:
         handler = logging.FileHandler(logfile)
@@ -109,11 +117,13 @@ def _add_logfile(ctx, param, value):
 
 
 def _log_queries(ctx, param, value):
+    """ Called when --log-queries argument is used. """
     if value:
         logging.getLogger('sqlalchemy.engine').setLevel('INFO')
 
 
 def _set_config(ctx, param, value):
+    """ Called when --config_file argument is used """
     if value:
         if not any(os.path.exists(p) for p in value):
             raise ValueError('No specified config paths exist: {}' % value)
@@ -166,7 +176,7 @@ def cli():
 
 
 def pass_config(f):
-    """Get a datacube config as the first argument. """
+    """Pass a datacube config as the first argument to the decorated function. """
 
     def new_func(*args, **kwargs):
         config_ = click.get_current_context().obj['config_file']
@@ -176,7 +186,7 @@ def pass_config(f):
 
 
 def pass_index(app_name=None, expect_initialised=True):
-    """Get a connection to the index as the first argument.
+    """Pass a connection to the database index as the first argument to the decorated function.
 
     A short name name of the application can be specified for logging purposes.
     """
@@ -198,21 +208,18 @@ def pass_index(app_name=None, expect_initialised=True):
     return decorate
 
 
-def parse_endpoint(value):
-    ip, port = tuple(value.split(':'))
-    return ip, int(port)
-
-
 EXECUTOR_TYPES = {
-    'serial': lambda _: get_executor(None, None),
-    'multiproc': lambda workers: get_executor(None, int(workers)),
-    'distributed': lambda addr: get_executor(parse_endpoint(addr), True)
+    'serial': lambda _: SerialExecutor(),
+    'multiproc': lambda num_workers: get_multiproc_executor(num_workers),
+    'distributed': lambda scheduler_addr: get_distributed_executor(scheduler_addr),
 }
 
 
 def _setup_executor(ctx, param, value):
+    """Called when an --executor argument is passed on the CLI."""
     try:
-        return EXECUTOR_TYPES[value[0]](value[1])
+        executor_type, executor_arg = value
+        return EXECUTOR_TYPES[executor_type](executor_arg)
     except ValueError:
         ctx.fail("Failed to create '%s' executor with '%s'" % value)
 
@@ -228,9 +235,9 @@ executor_cli_options = click.option('--executor',
 
 def handle_exception(msg, e):
     """
-    Exit following an exception in a CLI app
+    Utility function to exit following an exception in a CLI app.
 
-    If verbosity (-v flag) specified, dump out a stack trace. Otherwise,
+    If verbosity (-v flag) was specified, dump out a stack trace. Otherwise,
     simply print the given error message.
 
     Include a '%s' in the message to print the single line message from the
@@ -251,6 +258,7 @@ def handle_exception(msg, e):
 
 
 def to_pathlib(ctx, param, value):
+    """Convert a click file argument to a pathlib.Path type."""
     if value:
         return Path(value)
     else:
@@ -259,7 +267,7 @@ def to_pathlib(ctx, param, value):
 
 def parsed_search_expressions(f):
     """
-    Add [expression] arguments and --crs option to a click application
+    Decorator to add [expression] arguments and a --crs option to a click application.
 
     Passes a parsed dict of search expressions to the `expressions` argument
     of the command. The dict may include a `crs`.
