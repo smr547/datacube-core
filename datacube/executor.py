@@ -17,6 +17,7 @@ from __future__ import absolute_import, division
 import sys
 import six
 import logging
+import logstash
 import socket
 
 _REMOTE_LOG_FORMAT_STRING = '%(asctime)s {} %(process)d %(name)s %(levelname)s %(message)s'
@@ -82,21 +83,21 @@ def setup_stdout_logging(level=logging.WARN):
     return remote_function
 
 
+class DatacubeFormatter(logstash.LogstashFormatterVersion1):
+    def get_extra_fields(self, record):
+        fields = super(DatacubeFormatter, self).get_extra_fields(record)
+        if 'process' in record.__dict__:
+            fields['process'] = record.__dict__['process']
+        return fields
+
+
+class DatacubeLogstashHandler(logstash.UDPLogstashHandler):
+    def __init__(self, host, port=5959, message_type='logstash', tags=None, fqdn=False):
+        super(DatacubeLogstashHandler, self).__init__(host, port)
+        self.formatter = DatacubeFormatter(message_type, tags, fqdn)
+
+
 def setup_logstash_logging(host, level=logging.DEBUG):
-    import logstash
-
-    class DatacubeFormatter(logstash.LogstashFormatterVersion1):
-        def get_extra_fields(self, record):
-            fields = super(DatacubeFormatter, self).get_extra_fields(record)
-            if 'process' in record.__dict__:
-                fields['process'] = record.__dict__['process']
-            return fields
-
-    class DatacubeLogstashHandler(logstash.UDPLogstashHandler):
-        def __init__(self, host, port=5959, message_type='logstash', tags=None, fqdn=False, version=1):
-            super(DatacubeLogstashHandler, self).__init__(host, port)
-            self.formatter = DatacubeFormatter(message_type, tags, fqdn)
-    
     def remote_function():
         hostname = socket.gethostname()
         log_format_string = _REMOTE_LOG_FORMAT_STRING.format(hostname)
@@ -105,8 +106,7 @@ def setup_logstash_logging(host, level=logging.DEBUG):
         handler.formatter = logging.Formatter(log_format_string)
         handler.setLevel(logging.WARN)
 
-        logging.root.handlers = [handler,
-                                 DatacubeLogstashHandler(host, 5959, version=1)]
+        logging.root.handlers = [handler, DatacubeLogstashHandler(host, 5959)]
 
         logging.root.setLevel(level)
         if level <= logging.INFO:
@@ -135,6 +135,9 @@ def get_distributed_executor(scheduler, log_setup_function):
 
         def setup_logging(self):
             self._client.run(self.log_setup_function)
+
+        def run(self, callable):
+            self._client.run(callable)
 
         def submit(self, func, *args, **kwargs):
             return self._client.submit(func, *args, pure=False, **kwargs)
@@ -240,7 +243,7 @@ def get_multiproc_executor(num_workers):
 
 EXECUTOR_TYPES = {
     'serial': lambda _: SerialExecutor(),
-    'multiproc': lambda num_workers: get_multiproc_executor(num_workers),
+    'multiproc': get_multiproc_executor,
     'distributed': lambda scheduler_addr: get_distributed_executor(scheduler_addr,
                                                                    setup_logstash_logging(scheduler_addr.split(':')[0])),
 }
