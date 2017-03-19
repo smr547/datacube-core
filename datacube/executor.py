@@ -17,6 +17,7 @@ from __future__ import absolute_import, division
 import sys
 import six
 import logging
+import socket
 
 _REMOTE_LOG_FORMAT_STRING = '%(asctime)s {} %(process)d %(name)s %(levelname)s %(message)s'
 
@@ -69,8 +70,6 @@ class SerialExecutor(object):
 
 def setup_stdout_logging(level=logging.WARN):
     def remote_function():
-        import socket
-
         hostname = socket.gethostname()
         log_format_string = _REMOTE_LOG_FORMAT_STRING.format(hostname)
 
@@ -85,19 +84,20 @@ def setup_stdout_logging(level=logging.WARN):
 
 def setup_logstash_logging(host, level=logging.DEBUG):
     import logstash
+
     class DatacubeFormatter(logstash.LogstashFormatterVersion1):
         def get_extra_fields(self, record):
             fields = super(DatacubeFormatter, self).get_extra_fields(record)
             if 'process' in record.__dict__:
                 fields['process'] = record.__dict__['process']
             return fields
+
     class DatacubeLogstashHandler(logstash.UDPLogstashHandler):
-        def __init__(self, host, port=5959, message_type='logstash', tags=None, fqdn=False, version=0):
-            super(DatacubeLogstash, self).__init__(host, port)
+        def __init__(self, host, port=5959, message_type='logstash', tags=None, fqdn=False, version=1):
+            super(DatacubeLogstashHandler, self).__init__(host, port)
             self.formatter = DatacubeFormatter(message_type, tags, fqdn)
     
     def remote_function():
-
         hostname = socket.gethostname()
         log_format_string = _REMOTE_LOG_FORMAT_STRING.format(hostname)
 
