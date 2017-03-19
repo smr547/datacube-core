@@ -98,20 +98,19 @@ class DatacubeLogstashHandler(logstash.UDPLogstashHandler):
 
 
 def setup_logstash_logging(host, level=logging.DEBUG):
-    def remote_function():
-        hostname = socket.gethostname()
-        log_format_string = _REMOTE_LOG_FORMAT_STRING.format(hostname)
+    local_hostname = socket.gethostname()
+    log_format_string = _REMOTE_LOG_FORMAT_STRING.format(local_hostname)
 
-        handler = logging.StreamHandler()
-        handler.formatter = logging.Formatter(log_format_string)
-        handler.setLevel(logging.WARN)
+    handler = logging.StreamHandler()
+    handler.formatter = logging.Formatter(log_format_string)
+    handler.setLevel(logging.WARN)
 
-        logging.root.handlers = [handler, DatacubeLogstashHandler(host, 5959)]
+    logging.root.handlers = [handler, DatacubeLogstashHandler(host, 5959)]
 
-        logging.root.setLevel(level)
-        if level <= logging.INFO:
-            logging.getLogger('rasterio').setLevel(logging.INFO)
-    return remote_function
+    logging.root.setLevel(level)
+    if level <= logging.INFO:
+        logging.getLogger('rasterio').setLevel(logging.INFO)
+
 
 
 def get_distributed_executor(scheduler, log_setup_function):
@@ -124,17 +123,17 @@ def get_distributed_executor(scheduler, log_setup_function):
         return None
 
     class DistributedExecutor(object):
-        def __init__(self, client, log_setup_function):
+        def __init__(self, client, logging_address):
             """
             :type client: distributed.Client
             :return:
             """
             self._client = client
-            self.log_setup_function = log_setup_function
+            self.logging_address = logging_address
             self.setup_logging()
 
         def setup_logging(self):
-            self._client.run(self.log_setup_function)
+            self._client.run(setup_logstash_logging, self.logging_address)
 
         def run(self, callable):
             self._client.run(callable)
@@ -177,7 +176,7 @@ def get_distributed_executor(scheduler, log_setup_function):
             future.release()
 
     try:
-        return DistributedExecutor(distributed.Client(scheduler), log_setup_function)
+        return DistributedExecutor(distributed.Client(scheduler), scheduler.split(':')[0])
     except IOError:
         return None
 
@@ -244,8 +243,7 @@ def get_multiproc_executor(num_workers):
 EXECUTOR_TYPES = {
     'serial': lambda _: SerialExecutor(),
     'multiproc': get_multiproc_executor,
-    'distributed': lambda scheduler_addr: get_distributed_executor(scheduler_addr,
-                                                                   setup_logstash_logging(scheduler_addr.split(':')[0])),
+    'distributed': lambda scheduler_addr: get_distributed_executor(scheduler_addr),
 }
 
 
