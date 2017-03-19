@@ -84,10 +84,30 @@ def setup_stdout_logging(level=logging.WARN):
 
 
 def setup_logstash_logging(host, level=logging.DEBUG):
+    import logstash
+    class DatacubeFormatter(logstash.LogstashFormatterVersion1):
+        def get_extra_fields(self, record):
+            fields = super(DatacubeFormatter, self).get_extra_fields(record)
+            if 'process' in record.__dict__:
+                fields['process'] = record.__dict__['process']
+            return fields
+    class DatacubeLogstashHandler(logstash.UDPLogstashHandler):
+        def __init__(self, host, port=5959, message_type='logstash', tags=None, fqdn=False, version=0):
+            super(DatacubeLogstash, self).__init__(host, port)
+            self.formatter = DatacubeFormatter(message_type, tags, fqdn)
+    
     def remote_function():
-        import logstash
 
-        logging.root.addHandler(logstash.LogstashHandler(host, 5959, version=1))
+        hostname = socket.gethostname()
+        log_format_string = _REMOTE_LOG_FORMAT_STRING.format(hostname)
+
+        handler = logging.StreamHandler()
+        handler.formatter = logging.Formatter(log_format_string)
+        handler.setLevel(logging.WARN)
+
+        logging.root.handlers = [handler,
+                                 DatacubeLogstashHandler(host, 5959, version=1)]
+
         logging.root.setLevel(level)
         if level <= logging.INFO:
             logging.getLogger('rasterio').setLevel(logging.INFO)
