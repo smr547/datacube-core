@@ -112,8 +112,7 @@ def setup_logstash_logging(host, level=logging.DEBUG):
         logging.getLogger('rasterio').setLevel(logging.INFO)
 
 
-
-def get_distributed_executor(scheduler, log_setup_function):
+def get_distributed_executor(scheduler):
     """
     :param scheduler: Address of a scheduler
     """
@@ -134,9 +133,6 @@ def get_distributed_executor(scheduler, log_setup_function):
 
         def setup_logging(self):
             self._client.run(setup_logstash_logging, self.logging_address)
-
-        def run(self, callable):
-            self._client.run(callable)
 
         def submit(self, func, *args, **kwargs):
             return self._client.submit(func, *args, pure=False, **kwargs)
@@ -176,7 +172,7 @@ def get_distributed_executor(scheduler, log_setup_function):
             future.release()
 
     try:
-        return DistributedExecutor(distributed.Client(scheduler), scheduler.split(':')[0])
+        return DistributedExecutor(distributed.Client(scheduler), logging_address=scheduler.split(':')[0])
     except IOError:
         return None
 
@@ -243,7 +239,7 @@ def get_multiproc_executor(num_workers):
 EXECUTOR_TYPES = {
     'serial': lambda _: SerialExecutor(),
     'multiproc': get_multiproc_executor,
-    'distributed': lambda scheduler_addr: get_distributed_executor(scheduler_addr),
+    'distributed': get_distributed_executor,
 }
 
 
