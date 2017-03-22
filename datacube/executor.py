@@ -97,7 +97,7 @@ class DatacubeLogstashHandler(logstash.UDPLogstashHandler):
         self.formatter = DatacubeFormatter(message_type, tags, fqdn)
 
 
-def setup_logstash_logging(host, level=logging.DEBUG):
+def setup_logstash_logging(host, level=logging.INFO):
     local_hostname = socket.gethostname()
     log_format_string = _REMOTE_LOG_FORMAT_STRING.format(local_hostname)
 
@@ -111,10 +111,32 @@ def setup_logstash_logging(host, level=logging.DEBUG):
     if level <= logging.INFO:
         logging.getLogger('rasterio').setLevel(logging.INFO)
 
+DEFAULT_WORKER_LOGGING = {
+    'version': 1
+}
 
-def get_distributed_executor(scheduler):
+DEFAULT_LOGSTASH_LOGGING = {
+    'version': 1,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'brief',
+            'level': 'INFO',
+
+        }
+    },
+    'loggers': {
+        'rasterio': {
+            'level': 'INFO',
+        }
+    }
+}
+
+
+def get_distributed_executor(scheduler, worker_log_level=logging.INFO):
     """
     :param scheduler: Address of a scheduler
+    :param worker_log_level: Set logging level of remote workers
     """
     try:
         import distributed
@@ -122,16 +144,19 @@ def get_distributed_executor(scheduler):
         return None
 
     class DistributedExecutor(object):
-        def __init__(self, client, logging_address):
+        def __init__(self, client, logging_address, worker_log_config=None):
             """
             :type client: distributed.Client
             :return:
             """
             self._client = client
             self.logging_address = logging_address
+            self.worker_log_config = worker_log_config
             self.setup_logging()
 
         def setup_logging(self):
+            # if self.
+            # self._client.run(logging.config.dictConfig, self.logging_address, self.worker_log_level)
             self._client.run(setup_logstash_logging, self.logging_address)
 
         def submit(self, func, *args, **kwargs):
@@ -172,7 +197,9 @@ def get_distributed_executor(scheduler):
             future.release()
 
     try:
-        return DistributedExecutor(distributed.Client(scheduler), logging_address=scheduler.split(':')[0])
+        return DistributedExecutor(distributed.Client(scheduler),
+                                   logging_address=scheduler.split(':')[0],
+                                   worker_log_level=worker_log_level)
     except IOError:
         return None
 
