@@ -1,23 +1,23 @@
 from __future__ import absolute_import, division, print_function
 
 import logging
-from itertools import groupby
-from collections import namedtuple, OrderedDict
-from math import ceil
 import warnings
+from collections import namedtuple, OrderedDict
+from itertools import groupby
+from math import ceil
 
-import pandas
 import numpy
+import pandas
 import xarray
-from affine import Affine
 from dask import array as da
 
-from ..config import LocalConfig
+from api.xarray_geoextensions import _xarray_affine, _xarray_extent, _xarray_geobox
+from .query import Query, query_group_by, query_geopolygon
 from ..compat import string_types
+from ..config import LocalConfig
 from ..index import index_connect
 from ..storage.storage import DatasetSource, reproject_and_fuse
-from ..utils import geometry, intersects, data_resolution_and_offset
-from .query import Query, query_group_by, query_geopolygon
+from ..utils import geometry, intersects
 
 _LOG = logging.getLogger(__name__)
 
@@ -25,28 +25,6 @@ _LOG = logging.getLogger(__name__)
 Group = namedtuple('Group', ['key', 'datasets'])
 
 
-def _xarray_affine(obj):
-    dims = obj.crs.dimensions
-    xres, xoff = data_resolution_and_offset(obj[dims[1]].values)
-    yres, yoff = data_resolution_and_offset(obj[dims[0]].values)
-    return Affine.translation(xoff, yoff) * Affine.scale(xres, yres)
-
-
-def _xarray_extent(obj):
-    return obj.geobox.extent
-
-
-def _xarray_geobox(obj):
-    dims = obj.crs.dimensions
-    return geometry.GeoBox(obj[dims[1]].size, obj[dims[0]].size, obj.affine, obj.crs)
-
-
-xarray.Dataset.geobox = property(_xarray_geobox)
-xarray.Dataset.affine = property(_xarray_affine)
-xarray.Dataset.extent = property(_xarray_extent)
-xarray.DataArray.geobox = property(_xarray_geobox)
-xarray.DataArray.affine = property(_xarray_affine)
-xarray.DataArray.extent = property(_xarray_extent)
 
 
 class Datacube(object):
@@ -118,12 +96,12 @@ class Datacube(object):
 
     def _list_measurements(self):
         measurements = []
-        dts = self.index.products.get_all()
-        for dt in dts:
-            if dt.measurements:
-                for name, measurement in dt.measurements.items():
+        products = self.index.products.get_all()
+        for product in products:
+            if product.measurements:
+                for name, measurement in product.measurements.items():
                     row = {
-                        'product': dt.name,
+                        'product': product.name,
                         'measurement': name,
                     }
                     if 'attrs' in measurement:
