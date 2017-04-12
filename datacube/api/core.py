@@ -11,7 +11,6 @@ import pandas
 import xarray
 from dask import array as da
 
-from api.xarray_geoextensions import _xarray_affine, _xarray_extent, _xarray_geobox
 from .query import Query, query_group_by, query_geopolygon
 from ..compat import string_types
 from ..config import LocalConfig
@@ -23,8 +22,6 @@ _LOG = logging.getLogger(__name__)
 
 
 Group = namedtuple('Group', ['key', 'datasets'])
-
-
 
 
 class Datacube(object):

@@ -3,8 +3,9 @@ Add geometric extensions to :class:`xarray.Dataset` and :class:`xarray.DataArray
 with Data Cube.
 """
 from affine import Affine
+import xarray
 
-from utils import data_resolution_and_offset, geometry
+from datacube.utils import data_resolution_and_offset, geometry
 
 
 def _xarray_affine(obj):
