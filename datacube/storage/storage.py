@@ -527,9 +527,9 @@ class DatasetSource(BaseRasterDataSource):
 
     def __init__(self, dataset, measurement_id):
         """
-        Initialise for reading from a Data Cube Dataset
-        
-        :param Dataset dataset: dataset to read from 
+        Initialise for reading from a Data Cube Dataset.
+
+        :param Dataset dataset: dataset to read from
         :param str measurement_id: measurement to read. a single 'band' or 'slice'
         """
         self._dataset = dataset

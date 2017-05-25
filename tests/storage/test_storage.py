@@ -1,24 +1,21 @@
 from __future__ import absolute_import, division, print_function
 
-import os
 from contextlib import contextmanager
 
 import mock
 import netCDF4
 import numpy
 import pytest
+import rasterio.warp
 import xarray
 from affine import Affine, identity
 
-print(os.environ['PATH'])
-import rasterio.warp
-
 import datacube
 from datacube.model import Dataset, DatasetType, MetadataType
-from datacube.utils import geometry
+from datacube.storage.storage import NetCDFDataSource, OverrideBandDataSource
 from datacube.storage.storage import write_dataset_to_netcdf, reproject_and_fuse, read_from_source, Resampling, \
     DatasetSource
-from datacube.storage.storage import NetCDFDataSource, OverrideBandDataSource
+from datacube.utils import geometry
 
 GEO_PROJ = 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],' \
            'AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433],' \
@@ -466,21 +463,21 @@ _EXAMPLE_DATASET_TYPE = DatasetType(
 
 def test_multiband_support_in_datasetsource():
     defn = {
-            "id": '12345678123456781234567812345678',
-            "format": {"name": "hdf"},
-            'measurements': {'green': {'nodata': -999}},
-            "image": {
-                "bands": {
-                    'green': {
-                        'type': 'reflective',
-                        'cell_size': 25.0,
-                        'path': 'product/LS8_OLITIRS_NBAR_P54_GALPGS01-002_112_079_20140126_B1.tif',
-                        'label': 'Coastal Aerosol',
-                        'number': '1',
-                    },
-                }
+        "id": '12345678123456781234567812345678',
+        "format": {"name": "hdf"},
+        'measurements': {'green': {'nodata': -999}},
+        "image": {
+            "bands": {
+                'green': {
+                    'type': 'reflective',
+                    'cell_size': 25.0,
+                    'path': 'product/LS8_OLITIRS_NBAR_P54_GALPGS01-002_112_079_20140126_B1.tif',
+                    'label': 'Coastal Aerosol',
+                    'number': '1',
+                },
             }
         }
+    }
 
     # Without new band attribute, default to band number 1
     d = Dataset(_EXAMPLE_DATASET_TYPE, defn, uris=['file:///tmp'])
@@ -500,5 +497,3 @@ def test_multiband_support_in_datasetsource():
     ds = DatasetSource(d, measurement_id='green')
 
     assert ds.get_bandnumber(None) == band_num
-
-
