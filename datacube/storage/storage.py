@@ -40,23 +40,10 @@ except ImportError:
 
 _LOG = logging.getLogger(__name__)
 
-RESAMPLING_METHODS = {
-    'nearest': Resampling.nearest,
-    'cubic': Resampling.cubic,
-    'bilinear': Resampling.bilinear,
-    'cubic_spline': Resampling.cubic_spline,
-    'lanczos': Resampling.lanczos,
-    'average': Resampling.average,
-}
-
 assert str(rasterio.__version__) >= '0.34.0', "rasterio version 0.34.0 or higher is required"
 GDAL_NETCDF_DIM = ('NETCDF_DIM_'
                    if str(rasterio.__gdal_version__) >= '1.10.0' else
                    'NETCDF_DIMENSION_')
-
-
-def _rasterio_resampling_method(resampling):
-    return RESAMPLING_METHODS[resampling.lower()]
 
 
 if str(rasterio.__version__) >= '0.36.0':
@@ -133,7 +120,7 @@ def _no_fractional_translate(affine, eps=0.01):
     return abs(affine.c % 1.0) < eps and abs(affine.f % 1.0) < eps
 
 
-def read_from_source(source, dest, dst_transform, dst_nodata, dst_projection, resampling):
+def read_from_source(source, dest, dst_transform, dst_projection, dst_nodata, resampling):
     """
     Read from `source` into `dest`, reprojecting if necessary.
 
@@ -176,7 +163,7 @@ def reproject_and_fuse(sources, destination, dst_transform, dst_projection, dst_
     """
     assert len(destination.shape) == 2
 
-    resampling = _rasterio_resampling_method(resampling)
+    resampling = getattr(Resampling, resampling)
 
     def copyto_fuser(dest, src):
         """
@@ -192,14 +179,14 @@ def reproject_and_fuse(sources, destination, dst_transform, dst_projection, dst_
         return destination
     elif len(sources) == 1:
         with ignore_exceptions_if(skip_broken_datasets):
-            read_from_source(sources[0], destination, dst_transform, dst_nodata, dst_projection, resampling)
+            read_from_source(sources[0], destination, dst_transform, dst_projection, dst_nodata, resampling)
         return destination
     else:
         # Muitiple sources, we need to fuse them together into a single array
         buffer_ = numpy.empty(destination.shape, dtype=destination.dtype)
         for source in sources:
             with ignore_exceptions_if(skip_broken_datasets):
-                read_from_source(source, buffer_, dst_transform, dst_nodata, dst_projection, resampling)
+                read_from_source(source, buffer_, dst_transform, dst_projection, dst_nodata, resampling)
                 fuse_func(destination, buffer_)
 
         return destination
@@ -249,6 +236,47 @@ class BandDataSource(object):
                                        resampling=resampling,
                                        **kwargs)
 
+
+class OverrideBandDataSource(object):
+    """Wrapper for a rasterio.Band object that overrides nodata, crs and transform
+
+    This is useful for files with malformed or missing properties.
+
+
+    :type source: rasterio.Band
+    """
+
+    def __init__(self, source, nodata, crs, transform):
+        self.source = source
+        self.nodata = nodata
+        self.crs = crs
+        self.transform = transform
+
+    @property
+    def dtype(self):
+        return numpy.dtype(self.source.dtype)
+
+    @property
+    def shape(self):
+        return self.source.shape
+
+    def read(self, window=None, out_shape=None):
+        """Read data in the native format, returning a native array
+        """
+        return self.source.ds.read(indexes=self.source.bidx, window=window, out_shape=out_shape)
+
+    def reproject(self, dest, dst_transform, dst_crs, dst_nodata, resampling, **kwargs):
+        source = self.read()  # TODO: read only the part the we care about
+        return rasterio.warp.reproject(source,
+                                       dest,
+                                       src_transform=self.transform,
+                                       src_crs=str(self.crs),
+                                       src_nodata=self.nodata,
+                                       dst_transform=dst_transform,
+                                       dst_crs=str(dst_crs),
+                                       dst_nodata=dst_nodata,
+                                       resampling=resampling,
+                                       **kwargs)
 
 # class NetCDFDataSource(object):
 #     def __init__(self, dataset, variable, slab=None, nodata=None):
@@ -316,50 +344,9 @@ class BandDataSource(object):
 #                                        **kwargs)
 
 
-class OverrideBandDataSource(object):
-    """Wrapper for a rasterio.Band object that overrides nodata, crs and transform
-
-    This is useful for files with malformed or missing properties.
-
-
-    :type source: rasterio.Band
-    """
-    def __init__(self, source, nodata, crs, transform):
-        self.source = source
-        self.nodata = nodata
-        self.crs = crs
-        self.transform = transform
-
-    @property
-    def dtype(self):
-        return numpy.dtype(self.source.dtype)
-
-    @property
-    def shape(self):
-        return self.source.shape
-
-    def read(self, window=None, out_shape=None):
-        """Read data in the native format, returning a native array
-        """
-        return self.source.ds.read(indexes=self.source.bidx, window=window, out_shape=out_shape)
-
-    def reproject(self, dest, dst_transform, dst_crs, dst_nodata, resampling, **kwargs):
-        source = self.read()  # TODO: read only the part the we care about
-        return rasterio.warp.reproject(source,
-                                       dest,
-                                       src_transform=self.transform,
-                                       src_crs=str(self.crs),
-                                       src_nodata=self.nodata,
-                                       dst_transform=dst_transform,
-                                       dst_crs=str(dst_crs),
-                                       dst_nodata=dst_nodata,
-                                       resampling=resampling,
-                                       **kwargs)
-
-
 class RasterioDataSource(object):
     """
-    Abstract class used by fuse_sources and :func:`read_from_source`
+    Abstract class used by :func:`fuse_sources` and :func:`read_from_source`.
 
     """
     def __init__(self, filename, nodata):

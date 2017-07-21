@@ -253,12 +253,8 @@ def assert_same_read_results(source, dst_shape, dst_dtype, dst_transform, dst_no
 
     result = np.empty(dst_shape, dtype=dst_dtype)
     with datacube.set_options(reproject_threads=1):
-        read_from_source(source,
-                         result,
-                         dst_transform=dst_transform,
-                         dst_nodata=dst_nodata,
-                         dst_projection=dst_projection,
-                         resampling=resampling)
+        read_from_source(source, result, dst_transform=dst_transform, dst_projection=dst_projection,
+                         dst_nodata=dst_nodata, resampling=resampling)
 
     assert np.isclose(result, expected, atol=0, rtol=0.05, equal_nan=True).all()
     return result
@@ -437,7 +433,7 @@ def test_read_raster_with_custom_crs_and_transform(example_gdal_path):
         dst_transform = transform
         dst_crs = crs
         dst_nodata = nodata
-        resampling = datacube.storage.storage.RESAMPLING_METHODS['nearest']
+        resampling = rasterio.warp.Resampling.nearest
         band_data_source.reproject(dest2, dst_transform, dst_crs, dst_nodata, resampling)
         assert (dest1 == dest2).all()
 
