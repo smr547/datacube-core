@@ -17,6 +17,7 @@ HDF5, netCDF4, and GDAL::
    brew install hdf5
    brew install homebrew/science/netcdf
    brew install gdal
+   brew install libyaml
 
 Python and packages
 -------------------
@@ -27,7 +28,7 @@ Download the latest version of the software from the `repository <https://github
     git clone https://github.com/opendatacube/datacube-core
     cd datacube-core
     git checkout develop
-    python setup.py install
+    python setup.py install --user
 
 It may be useful to use conda to install binary packages::
 
