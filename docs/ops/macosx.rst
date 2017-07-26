@@ -14,7 +14,9 @@ Homebrew::
 
 HDF5, netCDF4, and GDAL::
 
-   brew install hdf5 netcdf gdal
+   brew install hdf5
+   brew install homebrew/science/netcdf
+   brew install gdal
 
 Python and packages
 -------------------
