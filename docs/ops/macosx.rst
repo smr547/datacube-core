@@ -28,6 +28,7 @@ Download the latest version of the software from the `repository <https://github
     git clone https://github.com/opendatacube/datacube-core
     cd datacube-core
     git checkout develop
+    export PATH=$PATH:/Library/PostgreSQL/9.4/bin
     python setup.py install --user
 
 It may be useful to use conda to install binary packages::
